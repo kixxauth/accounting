@@ -39,6 +39,17 @@ class TransactionRecord
   get_type: ->
     return if TransactionRecord.parse_raw_amount(@amount) < 0 then 'debit' else 'credit'
 
+  is_debit: ->
+    return @type is 'debit'
+
+  category_key: ->
+    unless @category then return 'NA'
+    return @category
+
+  irs_category_key: ->
+    unless @irs_category then return 'irs -- NA'
+    return "irs -- #{@irs_category}"
+
   @parse_raw_date: (str) ->
     if LIB.isObject(str) then return str
     return MOMENT(str, "MM/DD/YYYY").toDate()

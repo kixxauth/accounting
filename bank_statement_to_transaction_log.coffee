@@ -52,12 +52,8 @@ split_fields = (lines) ->
       resolve(arry.map(TransactionRecord.from_raw_array))
       return
 
-    on_error = (err) ->
-      reject(err)
-      return
-
     CSV()
-      .on('error', on_error)
+      .on('error', reject)
       .from.array(lines, {delimiter: '\t'})
       .to.array(to_array)
     return
