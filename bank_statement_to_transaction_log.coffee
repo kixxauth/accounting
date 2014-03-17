@@ -15,8 +15,10 @@ Parse a bank statement data dump of tab separated values into a clean transactio
 """
 
 CSV = require 'csv'
-MOMENT = require 'moment'
-NUMERAL = require 'numeral'
+
+ACC = require './lib/'
+
+TransactionRecord = require('lib/transaction_record').TransactionRecord
 
 exports.main = (opts) ->
   config = require(LIB.Path.create().resolve(opts.config).toString())
@@ -47,7 +49,7 @@ split_fields = (lines) ->
   promise = new Promise (resolve, reject) ->
 
     to_array = (arry, count) ->
-      resolve(arry.map(Record.fromArray))
+      resolve(arry.map(TransactionRecord.from_raw_array))
       return
 
     on_error = (err) ->
@@ -86,15 +88,12 @@ match_records = (opts) ->
 
 write_records = (opts) ->
   dest_dir = LIB.Path.create(opts.dest_dir)
-  known_path = dest_dir.append('transaction_log.csv')
+  known_path = dest_dir.append('incomplete_transaction_log.csv')
   unknown_path = dest_dir.append('unknown_transactions.csv')
 
   write = (data) ->
-    promise = LIB.Path.create(dest_dir).append('unknown_transactions.csv')
-      .write()
-
-    write_known = write_csv(known_path)(data.known)
-    write_unknown = write_csv(unknown_path)(data.unknown)
+    write_known = ACC.write_csv(known_path)(data.known)
+    write_unknown = ACC.write_csv(unknown_path)(data.unknown)
 
     promise = Promise.all([write_known, write_unknown]).then ->
       return {known: data.known, unknown: data.unknown, unknown_path: unknown_path, known_path: known_path}
@@ -108,23 +107,6 @@ complete = (state) ->
     print state.known_path.toString()
     print state.unknown_path.toString()
     return true
-
-
-write_csv = (path) ->
-  write = (data) ->
-    promise = new Promise (resolve, reject) ->
-      on_end = (count) -> resolve(path)
-      on_error = (err) -> reject(err)
-      record_to_a = (rec) -> return rec.to_array()
-
-      CSV().from.array(data.map(record_to_a))
-        .to.stream(path.newWriteStream())
-        .on('end', on_end)
-        .on('error', on_error)
-      return
-    return promise
-
-  return write
 
 
 class Matcher
@@ -158,57 +140,3 @@ class Matcher
 
   @create = (spec) ->
     return new Matcher(spec)
-
-
-class Record
-
-  constructor: (spec) ->
-    @date         = Record.parse_date(spec.date)
-    @type         = spec.type
-    @amount       = Record.parse_amount(spec.amount)
-    @vendor       = spec.vendor
-    @description  = spec.description
-    @category     = spec.category
-    @irs_category = spec.irs_category
-
-  update: (attrs) ->
-    return Record.create(LIB.extend(@, attrs))
-
-  to_array: ->
-    arry = [
-      @formatDate()
-      @type
-      @formatAmount()
-      @vendor
-      @description
-      @category
-      @irs_category
-    ]
-    return arry
-
-  formatAmount: ->
-    unless LIB.isNumber(@amount) then return ''
-    return NUMERAL(@amount).format('(0,0.00)')
-
-  formatDate: ->
-    unless @date then return 'YYYY-MM-DD'
-    return MOMENT(@date).format('YYYY-MM-DD')
-
-  @parse_date: (str) ->
-    if LIB.isObject(str) then return str
-    return MOMENT(str, "MM/DD/YYYY").toDate()
-
-  @parse_amount: (str) ->
-    if LIB.isNumber(str) then return str
-    return NUMERAL().unformat(str)
-
-  @fromArray = (data) ->
-    record = new Record({
-      date: data[0]
-      description: data[1]
-      amount: data[2]
-    })
-    return record
-
-  @create = (data) ->
-    return new Record(data)
