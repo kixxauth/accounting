@@ -14,6 +14,8 @@ exports.help = """
 Parse a bank statement data dump of tab separated values into a clean transaction log.
 """
 
+CSV = require 'csv'
+
 exports.main = (opts) ->
   config = require(LIB.Path.create().resolve(opts.config).toString())
   LIB.Path.create(opts.source).read()
@@ -21,6 +23,7 @@ exports.main = (opts) ->
     .then(filter_lines)
     .then(split_fields)
     .then(match_records({matchers: config.matchers}))
+    .then(write_records)
     .catch(LIB.fail);
   return
 
@@ -38,14 +41,22 @@ filter_lines = (lines) ->
 
 
 split_fields = (lines) ->
-  data = lines.map (line) ->
-    parts = line.split('\t')
-    line_item =
-      date: parts[0]
-      description: parts[1]
-      amount: parts[2]
-    return line_item
-  return data
+  promise = new Promise (resolve, reject) ->
+
+    to_array = (arry, count) ->
+      resolve(arry.map(Record.fromArray))
+      return
+
+    on_error = (err) ->
+      reject(err)
+      return
+
+    CSV()
+      .on('error', on_error)
+      .from.array(lines, {delimiter: '\t'})
+      .to.array(to_array)
+    return
+  return promise
 
 
 match_records = (opts) ->
@@ -53,50 +64,81 @@ match_records = (opts) ->
 
   matcher = (records) ->
     data = records.reduce((data, record) ->
-      if match = check_match(record)
-        data.known.push(match)
+      if match = find_match(record)
+        data.known.push(record.update(match.attributes()))
       else
         data.unknown.push(record)
 
       return data
     , {known: [], unknown: []})
-    print data.known
     return data
 
-  check_match = (record) ->
+  find_match = (record) ->
     match = LIB.find matchers, (matcher) ->
       return matcher.match(record)
-
-    if match then return match.match(record)
-    return
+    return match if match
 
   return matcher
 
 
+write_records = (data) ->
+  print data.unknown
+  print 'known:', data.known.length, 'unknown:', data.unknown.length
+
+
 class Matcher
-  regex: null
-  vendor: null
-  description: null
-  category: null
-  irs_category: null
 
   constructor: (spec) ->
-    @regex = spec.regex
-    @vendor = spec.vendor
-    @description = spec.description
-    @category = spec.category
+    @regex        = spec.regex
+    @type         = spec.type
+    @vendor       = spec.vendor
+    @description  = spec.description
+    @category     = spec.category
     @irs_category = spec.irs_category
 
   match: (record) ->
     unless @regex.test(record.description) then return
-    rv =
-      date: record.date
+    rv = record.update({
       vendor: @vendor
       description: @description
-      amount: record.amount
       category: @category
       irs_category: @irs_category
+    })
     return rv
+
+  attributes: ->
+    attrs =
+      vendor: @vendor
+      description: @description
+      category: @category
+      irs_category: @irs_category
+    return attrs
 
   @create = (spec) ->
     return new Matcher(spec)
+
+
+class Record
+
+  constructor: (spec) ->
+    @date         = spec.date
+    @type         = spec.type
+    @amount       = spec.amount
+    @vendor       = spec.vendor
+    @description  = spec.description
+    @category     = spec.category
+    @irs_category = spec.irs_category
+
+  update: (attrs) ->
+    return Record.create(LIB.extend(@, attrs))
+
+  @fromArray = (data) ->
+    record = new Record({
+      date: data[0]
+      description: data[1]
+      amount: data[2]
+    })
+    return record
+
+  @create = (data) ->
+    return new Record(data)
