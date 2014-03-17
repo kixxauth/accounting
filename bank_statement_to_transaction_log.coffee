@@ -15,6 +15,8 @@ Parse a bank statement data dump of tab separated values into a clean transactio
 """
 
 CSV = require 'csv'
+MOMENT = require 'moment'
+NUMERAL = require 'numeral'
 
 exports.main = (opts) ->
   config = require(LIB.Path.create().resolve(opts.config).toString())
@@ -23,7 +25,8 @@ exports.main = (opts) ->
     .then(filter_lines)
     .then(split_fields)
     .then(match_records({matchers: config.matchers}))
-    .then(write_records)
+    .then(write_records({dest_dir: opts.dest}))
+    .then(complete)
     .catch(LIB.fail);
   return
 
@@ -81,9 +84,47 @@ match_records = (opts) ->
   return matcher
 
 
-write_records = (data) ->
-  print data.unknown
-  print 'known:', data.known.length, 'unknown:', data.unknown.length
+write_records = (opts) ->
+  dest_dir = LIB.Path.create(opts.dest_dir)
+  known_path = dest_dir.append('transaction_log.csv')
+  unknown_path = dest_dir.append('unknown_transactions.csv')
+
+  write = (data) ->
+    promise = LIB.Path.create(dest_dir).append('unknown_transactions.csv')
+      .write()
+
+    write_known = write_csv(known_path)(data.known)
+    write_unknown = write_csv(unknown_path)(data.unknown)
+
+    promise = Promise.all([write_known, write_unknown]).then ->
+      return {known: data.known, unknown: data.unknown, unknown_path: unknown_path, known_path: known_path}
+    return promise
+  return write
+
+
+complete = (state) ->
+    print 'matched records:', state.known.length, 'unknown:', state.unknown.length
+    print "You'll need to manually update the unknown records and cancat them with concat_transaction_log.coffee"
+    print state.known_path.toString()
+    print state.unknown_path.toString()
+    return true
+
+
+write_csv = (path) ->
+  write = (data) ->
+    promise = new Promise (resolve, reject) ->
+      on_end = (count) -> resolve(path)
+      on_error = (err) -> reject(err)
+      record_to_a = (rec) -> return rec.to_array()
+
+      CSV().from.array(data.map(record_to_a))
+        .to.stream(path.newWriteStream())
+        .on('end', on_end)
+        .on('error', on_error)
+      return
+    return promise
+
+  return write
 
 
 class Matcher
@@ -99,6 +140,7 @@ class Matcher
   match: (record) ->
     unless @regex.test(record.description) then return
     rv = record.update({
+      type: @type
       vendor: @vendor
       description: @description
       category: @category
@@ -121,9 +163,9 @@ class Matcher
 class Record
 
   constructor: (spec) ->
-    @date         = spec.date
+    @date         = Record.parse_date(spec.date)
     @type         = spec.type
-    @amount       = spec.amount
+    @amount       = Record.parse_amount(spec.amount)
     @vendor       = spec.vendor
     @description  = spec.description
     @category     = spec.category
@@ -131,6 +173,34 @@ class Record
 
   update: (attrs) ->
     return Record.create(LIB.extend(@, attrs))
+
+  to_array: ->
+    arry = [
+      @formatDate()
+      @type
+      @formatAmount()
+      @vendor
+      @description
+      @category
+      @irs_category
+    ]
+    return arry
+
+  formatAmount: ->
+    unless LIB.isNumber(@amount) then return ''
+    return NUMERAL(@amount).format('(0,0.00)')
+
+  formatDate: ->
+    unless @date then return 'YYYY-MM-DD'
+    return MOMENT(@date).format('YYYY-MM-DD')
+
+  @parse_date: (str) ->
+    if LIB.isObject(str) then return str
+    return MOMENT(str, "MM/DD/YYYY").toDate()
+
+  @parse_amount: (str) ->
+    if LIB.isNumber(str) then return str
+    return NUMERAL().unformat(str)
 
   @fromArray = (data) ->
     record = new Record({
