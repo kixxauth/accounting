@@ -51,8 +51,10 @@ sort_by_category = (data) ->
         irs_category = sorted[record.irs_category_key()] = []
       category.push(record)
       irs_category.push(record)
+    else
+      sorted.receipts.push(record)
     return sorted
-  , Object.create(null))
+  , {receipts: []})
   return sorted
 
 
