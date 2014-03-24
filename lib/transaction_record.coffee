@@ -37,7 +37,7 @@ class TransactionRecord
     return MOMENT(@date).format('YYYY-MM-DD')
 
   get_type: ->
-    return if TransactionRecord.parse_raw_amount(@amount) < 0 then 'debit' else 'credit'
+    return if TransactionRecord.parse_amount(@amount) < 0 then 'debit' else 'credit'
 
   is_debit: ->
     return @type is 'debit'
@@ -50,13 +50,15 @@ class TransactionRecord
     unless @irs_category then return 'irs -- NA'
     return "irs -- #{@irs_category}"
 
-  @parse_raw_date: (str) ->
-    if LIB.isObject(str) then return str
-    return MOMENT(str, "MM/DD/YYYY").toDate()
+  @parse_date: (date) ->
+    if date instanceof Date then return date
+    if /[\d]{4}-[\d]{2}-[\d]{2}/.test(date)
+      return MOMENT(date, "YYYY-MM-DD").toDate()
+    return MOMENT(date, "MM/DD/YYYY").toDate()
 
-  @parse_raw_amount: (str) ->
-    if LIB.isNumber(str) then return str
-    return NUMERAL().unformat(str)
+  @parse_amount: (amount) ->
+    if LIB.isNumber(amount) then return amount
+    return NUMERAL().unformat(amount)
 
   @sort_by_date = (a, b) ->
     a = MOMENT(a.format_date()).toDate().getTime()
@@ -67,9 +69,9 @@ class TransactionRecord
 
   @from_array = (data) ->
     record = new TransactionRecord({
-      date: data[0]
+      date: @parse_date(data[0])
       type: data[1]
-      amount: data[2]
+      amount: @parse_amount(data[2])
       vendor: data[3]
       description: data[4]
       category: data[5]
@@ -77,15 +79,16 @@ class TransactionRecord
     })
     return record
 
-  @from_raw_array = (data) ->
-    record = new TransactionRecord({
-      date: @parse_raw_date(data[0])
-      description: data[1]
-      amount: @parse_raw_amount(data[2])
+  @create = (spec) ->
+    rec = new TransactionRecord({
+      date: @parse_date(spec.date)
+      type: spec.type
+      amount: @parse_amount(spec.amount)
+      vendor: spec.vendor
+      description: spec.description
+      category: spec.category
+      irs_category: spec.irs_category
     })
-    return record
+    return rec
 
-  @create = (data) ->
-    return new TransactionRecord(data)
-
-exports.TransactionRecord = TransactionRecord
+module.exports = TransactionRecord
