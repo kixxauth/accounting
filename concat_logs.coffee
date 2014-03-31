@@ -3,8 +3,10 @@ exports.usage = "concat_logs.coffee --a <file_path> --b <file_path> --dest <dire
 exports.options =
   a:
     description: "The path to the A source"
+    required: yes
   b:
     description: "The path to the B source"
+    required: yes
   dest:
     description: "The destination directory to output results. (default=cwd)"
 
@@ -12,11 +14,9 @@ exports.help = """
 Merges to transaction log files together and orders the records by date.
 """
 
-CSV = require 'csv'
-
 ACC = require './lib/'
 
-TransactionRecord = require('./lib/transaction_record').TransactionRecord
+TransactionRecord = require './lib/transaction_record'
 
 
 exports.main = (opts) ->
@@ -33,22 +33,13 @@ read_sources = (opts) ->
   b_path = LIB.Path.create(opts.b)
 
   read = ->
-    promise_a = read_csv(a_path.newReadStream())
-    promise_b = read_csv(b_path.newReadStream())
+    promise_a = ACC.middleware.read_csv(a_path)()
+    promise_b = ACC.middleware.read_csv(b_path)()
 
     to_array = (lists) -> return lists[0].concat(lists[1])
 
     return Promise.all([promise_a, promise_b]).then(to_array)
   return read
-
-
-read_csv = (stream) ->
-  promise = new Promise (resolve, reject) ->
-    on_end = (data, count) -> resolve(data.map(TransactionRecord.from_array))
-    on_error = (err) -> reject(err)
-    CSV().from.stream(stream).to.array(on_end).on('error', on_error)
-    return
-  return promise
 
 
 sort_records = (records) ->

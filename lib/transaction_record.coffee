@@ -50,13 +50,13 @@ class TransactionRecord
     unless @irs_category then return 'irs -- NA'
     return "irs -- #{@irs_category}"
 
-  @parse_date: (date) ->
+  @parse_date = (date) ->
     if date instanceof Date then return date
     if /[\d]{4}-[\d]{2}-[\d]{2}/.test(date)
       return MOMENT(date, "YYYY-MM-DD").toDate()
     return MOMENT(date, "MM/DD/YYYY").toDate()
 
-  @parse_amount: (amount) ->
+  @parse_amount = (amount) ->
     if LIB.isNumber(amount) then return amount
     return NUMERAL().unformat(amount)
 
@@ -69,9 +69,9 @@ class TransactionRecord
 
   @from_array = (data) ->
     record = new TransactionRecord({
-      date: @parse_date(data[0])
+      date: TransactionRecord.parse_date(data[0])
       type: data[1]
-      amount: @parse_amount(data[2])
+      amount: TransactionRecord.parse_amount(data[2])
       vendor: data[3]
       description: data[4]
       category: data[5]
@@ -81,9 +81,9 @@ class TransactionRecord
 
   @create = (spec) ->
     rec = new TransactionRecord({
-      date: @parse_date(spec.date)
+      date: TransactionRecord.parse_date(spec.date)
       type: spec.type
-      amount: @parse_amount(spec.amount)
+      amount: TransactionRecord.parse_amount(spec.amount)
       vendor: spec.vendor
       description: spec.description
       category: spec.category
