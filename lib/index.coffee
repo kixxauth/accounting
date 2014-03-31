@@ -5,15 +5,20 @@ TransactionRecord = require './transaction_record'
 
 exports.middleware =
 
-  write_csv: (path) ->
+  write_csv: (path, options) ->
     write = (data) ->
       promise = new Promise (resolve, reject) ->
         on_end = (count) -> resolve(path)
-        on_error = (err) -> reject(err)
-        record_to_a = (rec) -> return rec.to_array()
 
+        on_error = (err) -> reject(err)
+
+        record_to_a = (rec) ->
+          return rec if Array.isArray(rec)
+          return rec.to_array()
+
+        print options
         CSV().from.array(data.map(record_to_a))
-          .to.stream(path.newWriteStream())
+          .to.stream(path.newWriteStream(), options)
           .on('end', on_end)
           .on('error', on_error)
         return

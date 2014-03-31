@@ -3,6 +3,13 @@ NUMERAL = require 'numeral'
 
 
 class TransactionRecord
+  @FRESHBOOKS_EXPENSE_COLUMNS = [
+    'date'
+    'vendor'
+    'category'
+    'notes'
+    'amount'
+  ]
 
   constructor: (spec) ->
     @date         = spec.date
@@ -28,6 +35,16 @@ class TransactionRecord
     ]
     return arry
 
+  to_freshbooks_expense: ->
+    arry = [
+      @format_slash_date()
+      @vendor
+      @category
+      @description
+      @format_amount_neg()
+    ]
+    return arry
+
   format_amount: ->
     unless LIB.isNumber(@amount) then return @amount
     return NUMERAL(@amount).format('(0,0.00)')
@@ -35,6 +52,14 @@ class TransactionRecord
   format_date: ->
     unless @date then return 'YYYY-MM-DD'
     return MOMENT(@date).format('YYYY-MM-DD')
+
+  format_slash_date: ->
+    unless @date then return 'MM/DD/YY'
+    return MOMENT(@date).format('MM/DD/YY')
+
+  format_amount_neg: ->
+    unless LIB.isNumber(@amount) then return @amount
+    return NUMERAL(@amount).format('-0,0.00')
 
   get_type: ->
     return if TransactionRecord.parse_amount(@amount) < 0 then 'debit' else 'credit'
