@@ -1,4 +1,4 @@
-exports.usage = "personal_taxes.coffee"
+exports.usage = "personal_taxes.coffee --form <file_path>"
 
 exports.options =
   form:
@@ -9,17 +9,224 @@ exports.help = """
 Compute tax forms and output results.
 """
 
-ComputePersonalTaxPerformer = require './lib/compute_personal_tax_performer'
+ACC = require './lib'
+
+sum      = ACC.sum
+subtract = ACC.subtract
+multiply = ACC.multiply
+
 
 exports.main = (opts) ->
-  Promise.cast(ComputePersonalTaxPerformer.create(opts)())
-    .then(result_printer(opts))
+  state =
+    form_path: opts.form
+    other_taxes: Object.create(null)
+
+  Promise.cast(LIB.Crystal.create(state))
+    .then(read_form)
+    .then(compute_schedule_c)
+    .then(compute_income)
+    .then(compute_self_employment_tax)
+    .then(compute_adjusted_gross_income)
+    .then(compute_base_tax)
+    .then(compute_credits)
+    .then(compute_total_tax)
+    .then(compute_payments)
+    .then(compute_tax)
     .catch(LIB.fail)
   return
 
 
-result_printer = (opts) ->
-  print_results = (res) ->
-    print 'RESULTS', res
-    return
-  return print_results
+compute_schedule_c = (state) ->
+  form = state.schedule_c
+
+  log = (prop, val) ->
+    log_value("Schedule C -- #{prop}", val)
+
+  form.net_receipts = subtract(form.gross_receipts, 0)
+
+  costs = []
+  for own name, amount of form.cost_of_goods_sold
+    costs.push(amount)
+    log("cost of goods sold -- #{name}", amount)
+
+  form.cost_of_goods_sold = sum(costs)
+
+  form.gross_profit = subtract(form.net_receipts, form.cost_of_goods_sold)
+
+  form.gross_income = sum(form.gross_profit, 0)
+
+  other_expenses = form.expenses.other_expenses
+  delete form.expenses.other_expenses
+  expenses = []
+  for own name, amount of form.expenses
+    expenses.push(amount)
+    log("expenses -- #{name}", amount)
+
+  form.total_expenses = sum(expenses)
+
+  form.tentative_profit = subtract(form.gross_income, form.total_expenses)
+
+  form.business_use_of_home = multiply(form.home_business_use.used_square_footage, 5)
+
+  form.net_profit = subtract(form.tentative_profit, form.business_use_of_home)
+
+  log('line 1', form.gross_receipts)
+  log('line 3', form.net_receipts)
+  log('line 4', form.cost_of_goods_sold)
+  log('line 5 Gross Profit', form.gross_profit)
+  log('line 7 Gross Income', form.gross_income)
+  log('line 28 Total expenses', form.total_expenses)
+  log('line 29 Tentative profit', form.total_expenses)
+  log('line 30a', form.home_business_use.total_square_footage)
+  log('line 30b', form.home_business_use.used_square_footage)
+  log('line 30 Business use of home', form.business_use_of_home)
+  log('line 31 Net profit', form.net_profit)
+  return state
+
+
+compute_income = (state) ->
+  form = state['1040'].income
+
+  form.business_income = state.schedule_c.net_profit
+
+  income = []
+  for own name, amount of form
+    income.push(amount)
+
+  state.define('total_income', sum(income))
+
+  log_value('line 7 wages', form.wages)
+  log_value('line 8a taxable interest', form.taxable_interest)
+  log_value('line 9a ordinary dividends', form.ordinary_dividends)
+  log_value('line 12 business income', form.business_income)
+  log_value('line 13 capital gain', form.capital_gain)
+  log_value('line 17 s-corp income', form.s_corp_income)
+  log_value('line 22 total income', state.total_income)
+  return state
+
+
+compute_self_employment_tax = (state) ->
+  tax = 0
+
+  profit = state.schedule_c.net_profit
+  log_value('Schedule SE -- line 3', profit)
+
+  check = multiply(profit, 0.9235)
+  log_value('Schedule SE -- line 4', check)
+
+  if check < 400
+    print "We don't have to pay self employment tax!"
+  else if check <= 113700
+    tax = multiply(check, 0.153)
+  else
+    tax = multiply(check, 0.029)
+    tax = sum(tax, '14,098.80')
+
+  state.other_taxes.self_employment_tax = tax
+  log_value('Schedule SE -- line 5', tax)
+  state.define('deductable_self_employment_tax', multiply(tax, 0.5))
+  log_value('Schedule SE -- line 6', state.deductable_self_employment_tax)
+  return state
+
+
+compute_adjusted_gross_income = (state) ->
+  form = state['1040'].deductions
+  form.deductable_self_employment_tax = state.deductable_self_employment_tax
+
+  deductions = []
+  for own name, amount of form
+    deductions.push(amount)
+
+  state.define('deductions', sum(deductions))
+  agi = subtract(state.total_income, state.deductions)
+  state.define('adjusted_gross_income', agi)
+
+  log_value('line 26', form.moving_expenses)
+  log_value('line 27', form.deductable_self_employment_tax)
+  log_value('line 32', form.ira_deduction)
+  log_value('line 36', state.deductions)
+  log_value('line 37 Adusted Gross Income', agi)
+  return state
+
+
+compute_base_tax = (state) ->
+  form = state['1040']
+
+  if state.adjusted_gross_income > 150000
+    throw new Error("Can't compute exemptions above $150k adjusted gross income")
+
+  after_deduction = subtract(state.adjusted_gross_income, form.standard_deduction)
+
+  state.define('exemption_amount', multiply(form.exemptions, 3900))
+
+  state.define('taxable_income', subtract(after_deduction, state.exemption_amount))
+
+  # Base tax needs to be looked up in the tax table and manually entered in the form.
+  state.define('base_tax', state['1040'].base_tax)
+
+  log_value('line 40', form.standard_deduction)
+  log_value('line 41', after_deduction)
+  log_value('line 42 exemptions', state.exemption_amount)
+  log_value('line 43 taxable income', state.taxable_income)
+  print "Enter base_tax based on this value ->", state.taxable_income
+  log_value('line 44 Tax', state.base_tax)
+
+  state.define('total_base_tax', sum(state.base_tax, alternative_minimum_tax = 0))
+  return state
+
+
+compute_credits = (state) ->
+  state.define('total_credits', 0)
+  state.define('tax_and_credits', subtract(state.total_base_tax, state.total_credits))
+  log_value('line 55', state.tax_and_credits)
+  return state
+
+
+compute_total_tax = (state) ->
+  taxes = [state.tax_and_credits]
+  for own name, amount of state.other_taxes
+    taxes.push(amount)
+    log_value(name, amount)
+
+  total = sum(taxes)
+  return assign_and_log(state, 'total_tax', total)
+
+
+compute_payments = (state) ->
+  payments = []
+  for own name, amount of state['1040'].payments
+    payments.push(amount)
+    log_value(name, amount)
+
+  total = sum(payments)
+  return assign_and_log(state, 'total_payments', total)
+
+
+compute_tax = (state) ->
+  tax = subtract(state.total_tax, state.total_payments)
+  return assign_and_log(state, 'tax', tax)
+
+
+read_form = (state) ->
+  form = require(state.form_path)
+  utils =
+    sum: sum
+    subtract: subtract
+
+  state.define('1040', Object.create(null))
+  form['1040'](state['1040'], utils)
+
+  state.define('schedule_c', Object.create(null))
+  form['Schedule C'](state.schedule_c, utils)
+
+  return state
+
+
+assign_and_log = (state, prop, val) ->
+  state.define(prop, val)
+  log_value(prop, val)
+  return state
+
+
+log_value = (prop, val) ->
+  print "#{prop}: #{val}"
