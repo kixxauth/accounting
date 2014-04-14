@@ -10,6 +10,8 @@ Compute tax forms and output results.
 """
 
 ACC = require './lib'
+Schedule_C = require('./lib/schedule_c').Schedule_C
+Form_2441 = require('./lib/form_2441').Form_2441
 
 sum      = ACC.sum
 subtract = ACC.subtract
@@ -37,44 +39,25 @@ exports.main = (opts) ->
 
 
 compute_schedule_c = (state) ->
-  form = state.schedule_c
 
   log = (prop, val) ->
     log_value("Schedule C -- #{prop}", val)
+    return
 
-  form.net_receipts = subtract(form.gross_receipts, 0)
+  log_expense = (prop, val) ->
+    return log("expenses -- #{prop}", val)
 
-  costs = []
-  for own name, amount of form.cost_of_goods_sold
-    costs.push(amount)
-    log("cost of goods sold -- #{name}", amount)
-
-  form.cost_of_goods_sold = sum(costs)
-
-  form.gross_profit = subtract(form.net_receipts, form.cost_of_goods_sold)
-
-  form.gross_income = sum(form.gross_profit, 0)
-
-  other_expenses = form.expenses.other_expenses
-  delete form.expenses.other_expenses
-  expenses = []
-  for own name, amount of form.expenses
-    expenses.push(amount)
-    log("expenses -- #{name}", amount)
-
-  form.total_expenses = sum(expenses)
-
-  form.tentative_profit = subtract(form.gross_income, form.total_expenses)
-
-  form.business_use_of_home = multiply(form.home_business_use.used_square_footage, 5)
-
-  form.net_profit = subtract(form.tentative_profit, form.business_use_of_home)
+  form = Schedule_C.create(state.schedule_c).compute()
 
   log('line 1', form.gross_receipts)
   log('line 3', form.net_receipts)
   log('line 4', form.cost_of_goods_sold)
   log('line 5 Gross Profit', form.gross_profit)
   log('line 7 Gross Income', form.gross_income)
+
+  for own expense, amount of form.expenses
+    log_expense(expense, amount)
+
   log('line 28 Total expenses', form.total_expenses)
   log('line 29 Tentative profit', form.total_expenses)
   log('line 30a', form.home_business_use.total_square_footage)
@@ -176,9 +159,33 @@ compute_base_tax = (state) ->
 
 
 compute_credits = (state) ->
-  state.define('total_credits', 0)
+  compute_dependent_care_credit(state)
+  state.define('dependent_care_credit', state['2441'].credit)
+  credits = sum([
+    state.dependent_care_credit
+  ])
+  state.define('total_credits', credits)
   state.define('tax_and_credits', subtract(state.total_base_tax, state.total_credits))
   log_value('line 55', state.tax_and_credits)
+  return state
+
+
+compute_dependent_care_credit = (state) ->
+
+  log = (prop, val) ->
+    log_value("2441 -- #{prop}", val)
+    return
+
+  form = state['2441']
+  form.adjusted_gross_income = state.adjusted_gross_income
+  form = Form_2441.create(form).compute()
+  log('line 4', form.my_earned_income)
+  log('line 5', form.spouse_earned_income)
+  log('line 6', form.max_amount)
+  log('line 8', form.multiplier)
+  log('line 9', form.tentative_credit)
+  log('line 10', state.total_base_tax)
+  log('line 11 Dependent Care Credit', form.credit)
   return state
 
 
@@ -218,6 +225,9 @@ read_form = (state) ->
 
   state.define('schedule_c', Object.create(null))
   form['Schedule C'](state.schedule_c, utils)
+
+  state.define('2441', Object.create(null))
+  form['2441'](state['2441'], utils)
 
   return state
 

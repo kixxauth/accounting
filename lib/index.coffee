@@ -18,7 +18,15 @@ exports.multiply = (a, b) ->
   return round(NUM(a).multiply(b).valueOf())
 
 exports.ensure_number = (n) ->
-  return NUM().unformat(n)
+  if n then return NUM().unformat(n)
+  return 0
+
+exports.num_sort = (a, b) ->
+  a = exports.ensure_number(a)
+  b = exports.ensure_number(b)
+  if a < b then return -1
+  if a > b then return 1
+  return 0
 
 sum = (a, b) ->
   return a + b
