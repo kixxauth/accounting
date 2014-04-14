@@ -166,6 +166,8 @@ compute_credits = (state) ->
   ])
   state.define('total_credits', credits)
   state.define('tax_and_credits', subtract(state.total_base_tax, state.total_credits))
+
+  log_value('line 54 total credits', state.total_credits)
   log_value('line 55', state.tax_and_credits)
   return state
 
