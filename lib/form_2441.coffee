@@ -21,7 +21,7 @@ class Form_2441
     list = [
       ensure_number(@form.my_earned_income)
       ensure_number(@form.spouse_earned_income)
-      6000
+      ensure_number(@form.line_3)
     ]
     return list.sort(num_sort).shift()
 
@@ -34,6 +34,7 @@ class Form_2441
     return multiply(@form.max_amount, @form.multiplier)
 
   # form.amount_paid - Number
+  # form.line_3 - Number
   # form.my_earned_income - Number
   # form.spouse_earned_income - Number
   # form.adjusted_gross_income - Number
