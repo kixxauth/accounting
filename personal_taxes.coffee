@@ -59,7 +59,7 @@ compute_schedule_c = (state) ->
     log_expense(expense, amount)
 
   log('line 28 Total expenses', form.total_expenses)
-  log('line 29 Tentative profit', form.total_expenses)
+  log('line 29 Tentative profit', form.tentative_profit)
   log('line 30a', form.home_business_use.total_square_footage)
   log('line 30b', form.home_business_use.used_square_footage)
   log('line 30 Business use of home', form.business_use_of_home)
