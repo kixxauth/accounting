@@ -12,7 +12,7 @@ CSV = require 'csv'
 
 ACC = require './lib/'
 
-TransactionRecord = require('./lib/transaction_record').TransactionRecord
+TransactionRecord = require('./lib/transaction_record')
 
 
 exports.main = (opts) ->
