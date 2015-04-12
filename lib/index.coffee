@@ -44,3 +44,11 @@ exports.writeCSV = (path, data) ->
       if err then return reject(err)
       path.write(text).then(resolve, reject)
       return
+
+
+exports.readCSV = (path) ->
+  return path.read().then (text) ->
+    return new Promise (resolve, reject) ->
+      CSV.parse text, (err, data) ->
+        if err then return reject(err)
+        return resolve(data)

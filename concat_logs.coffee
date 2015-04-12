@@ -1,62 +1,75 @@
-exports.usage = "concat_logs.coffee --a <file_path> --b <file_path> --dest <directory_path>"
+exports.usage = "--a <file_path> --b <file_path> --dest <directory_path>"
 
 exports.options =
   a:
-    description: "The path to the A source"
+    describe: "The path to the A source"
     required: yes
   b:
-    description: "The path to the B source"
+    describe: "The path to the B source"
     required: yes
   dest:
-    description: "The destination directory to output results. (default=cwd)"
+    describe: "The destination directory to output results."
 
 exports.help = """
 Merges to transaction log files together and orders the records by date.
 """
 
-ACC = require './lib/'
+exports.main = (API) ->
+  argv    = API.argv()
 
-TransactionRecord = require './lib/transaction_record'
+  args =
+    pathA      : API.path().resolve(argv.a)
+    pathB      : API.path().resolve(argv.b)
+    outputPath : API.path().resolve(argv.dest).append('sorted_transactions.csv')
 
+  performAction = createPerformAction(API)
 
-exports.main = (opts) ->
-  read_sources(opts)()
-    .then(sort_records)
-    .then(write_records({dest_dir: opts.dest}))
-    .then(complete)
-    .catch(LIB.fail);
-  return
+  onsuccess = (args) ->
+    print 'total records', args.records.length
+    print args.outputPath.toString()
+    return true
 
+  onerror = (err) ->
+    console.error "Runtime Error:"
+    console.error err.stack or err.message or err
+    return process.exit(1)
 
-read_sources = (opts) ->
-  a_path = LIB.Path.create(opts.a)
-  b_path = LIB.Path.create(opts.b)
-
-  read = ->
-    promise_a = ACC.middleware.read_csv(a_path)()
-    promise_b = ACC.middleware.read_csv(b_path)()
-
-    to_array = (lists) -> return lists[0].concat(lists[1])
-
-    return Promise.all([promise_a, promise_b]).then(to_array)
-  return read
+  return performAction.run(API, args).then(onsuccess, onerror)
 
 
-sort_records = (records) ->
-  records.sort(TransactionRecord.sort_by_date)
-  return records
+createPerformAction = (API) ->
+
+  LIB               = require './lib/'
+  TransactionRecord = require './lib/transaction_record'
+
+  factory = API.factory [API.mixins('Action')],
+
+    # args.pathA
+    # args.pathB
+    # args.outputPath
+    initialize: ->
+      @q 'readSources'
+      @q 'sortRecords'
+      @q 'writeRecords'
+
+    readSources: (API, args) ->
+      promises = [
+        LIB.readCSV(args.pathA)
+        LIB.readCSV(args.pathB)
+      ]
+      return Promise.all(promises).then (lists) ->
+        args.records = Array::concat.apply([], lists)
+          .map(TransactionRecord.from_array)
+        return args
+
+    sortRecords: (API, args) ->
+      args.records.sort(TransactionRecord.sort_by_date)
+      return args
+
+    writeRecords: (API, args) ->
+      records = args.records.map (transaction) ->
+        return transaction.to_array()
+      return LIB.writeCSV(args.outputPath, records)
 
 
-write_records = (opts) ->
-  path = LIB.Path.create(opts.dest_dir).append('transaction_log.csv')
-  write_csv = ACC.middleware.write_csv(path)
-
-  write = (data) ->
-    return write_csv(data).then -> return {path: path, length: data.length}
-  return write
-
-
-complete = (state) ->
-  print 'total records', state.length
-  print state.path.toString()
-
+  return factory()

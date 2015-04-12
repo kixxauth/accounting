@@ -58,11 +58,11 @@ createPerformAction = (API) ->
     # args.knownPath
     # args.unknownPath
     initialize: ->
-      this.q 'readRawTransactions'
-      this.q 'parseRawTransactions'
-      this.q 'getConfigs'
-      this.q 'matchTransactions'
-      this.q 'writeFiles'
+      @q 'readRawTransactions'
+      @q 'parseRawTransactions'
+      @q 'getConfigs'
+      @q 'matchTransactions'
+      @q 'writeFiles'
 
     readRawTransactions: (API, args) ->
       args.sourcePath.read().then (data) ->
