@@ -1,4 +1,4 @@
-MOMENT = require 'moment'
+MOMENT  = require 'moment'
 NUMERAL = require 'numeral'
 
 
@@ -21,7 +21,7 @@ class TransactionRecord
     @irs_category = spec.irs_category
 
   update: (attrs) ->
-    return TransactionRecord.create(LIB.extend(@, attrs))
+    return TransactionRecord.create(U.extend(@, attrs))
 
   to_array: ->
     arry = [
@@ -46,7 +46,7 @@ class TransactionRecord
     return arry
 
   format_amount: ->
-    unless LIB.isNumber(@amount) then return @amount
+    unless U.isNumber(@amount) then return @amount
     return NUMERAL(@amount).format('(0,0.00)')
 
   format_date: ->
@@ -58,7 +58,7 @@ class TransactionRecord
     return MOMENT(@date).format('MM/DD/YY')
 
   format_amount_neg: ->
-    unless LIB.isNumber(@amount) then return @amount
+    unless U.isNumber(@amount) then return @amount
     return NUMERAL(@amount).format('-0,0.00')
 
   get_type: ->
@@ -82,7 +82,7 @@ class TransactionRecord
     return MOMENT(date, "MM/DD/YYYY").toDate()
 
   @parse_amount = (amount) ->
-    if LIB.isNumber(amount) then return amount
+    if U.isNumber(amount) then return amount
     return NUMERAL().unformat(amount)
 
   @sort_by_date = (a, b) ->
@@ -93,27 +93,25 @@ class TransactionRecord
     return 0
 
   @from_array = (data) ->
-    record = new TransactionRecord({
-      date: TransactionRecord.parse_date(data[0])
-      type: data[1]
-      amount: TransactionRecord.parse_amount(data[2])
-      vendor: data[3]
-      description: data[4]
-      category: data[5]
-      irs_category: data[6]
-    })
+    record = new TransactionRecord
+      date         : TransactionRecord.parse_date(data[0])
+      type         : data[1]
+      amount       : TransactionRecord.parse_amount(data[2])
+      vendor       : data[3]
+      description  : data[4]
+      category     : data[5]
+      irs_category : data[6]
     return record
 
   @create = (spec) ->
-    rec = new TransactionRecord({
-      date: TransactionRecord.parse_date(spec.date)
-      type: spec.type
-      amount: TransactionRecord.parse_amount(spec.amount)
-      vendor: spec.vendor
-      description: spec.description
-      category: spec.category
-      irs_category: spec.irs_category
-    })
+    rec = new TransactionRecord
+      date         : TransactionRecord.parse_date(spec.date)
+      type         : spec.type
+      amount       : TransactionRecord.parse_amount(spec.amount)
+      vendor       : spec.vendor
+      description  : spec.description
+      category     : spec.category
+      irs_category : spec.irs_category
     return rec
 
 module.exports = TransactionRecord

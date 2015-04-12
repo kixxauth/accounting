@@ -19,10 +19,10 @@ class Matcher
 
   attributes: ->
     attrs =
-      vendor: @vendor
-      description: @description
-      category: @category
-      irs_category: @irs_category
+      vendor       : @vendor
+      description  : @description
+      category     : @category
+      irs_category : @irs_category
     return attrs
 
   @create = (spec) ->
