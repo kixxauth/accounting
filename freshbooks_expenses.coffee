@@ -1,65 +1,71 @@
-exports.usage = "freshbooks_expenses.coffee --source <file_path> --des <directory_path>"
+exports.usage = "--source <file_path> --dest <directory_path>"
 
 exports.options =
   source:
-    description: "The source file of the transaction log in comma separated values."
+    describe: "The source file of the transaction log in comma separated values."
     required: yes
   dest:
-    description: "The destination directory to output results. (default=cwd)"
+    describe: "The destination directory to output results."
+    required: yes
 
 exports.help = """
 Prepare a bank transaction log for import as Freshbooks expenses. Filters out
 cash withdrawls and credits.
 """
 
-TransactionRecord = require './lib/transaction_record'
+exports.main = (API) ->
+  argv = API.argv()
 
-ACC = require './lib/'
+  args =
+    sourcePath: API.path().resolve(argv.source)
+    outputPath: API.path().resolve(argv.dest).append('freshbooks_expenses.csv')
 
+  performAction = createPerformAction(API)
 
-exports.main = (opts) ->
-  source_path = LIB.Path.create(opts.source)
-  dest_path = LIB.Path.create(opts.dest).append('freshbooks_expenses.csv')
+  onsuccess = (args) ->
+    print args.outputPath.toString()
+    return true
 
-  translate = ->
-    return dest_path
+  onerror = (err) ->
+    console.error "Runtime Error:"
+    console.error err.stack or err.message or err
+    return process.exit(1)
 
-  ACC.middleware.read_csv(source_path)()
-    .then(filter)
-    .then(to_freshbooks)
-    .then(write_csv(dest_path))
-    .then(translate)
-    .then(complete)
-    .catch(LIB.fail);
-  return
-
-
-filter = (transactions) ->
-  keepers = LIB.filter transactions, (record) ->
-    return no if record.type is 'credit'
-    unless record.category
-      throw new Error("Uncategorized record: #{record.date},#{record.description}")
-    return no if record.category is 'cash'
-    return yes
-  return keepers
+  return performAction.run(API, args).then(onsuccess, onerror)
 
 
-to_freshbooks = (expenses) ->
-  records = expenses.map (record) ->
-    return record.to_freshbooks_expense()
-  return records
+createPerformAction = (API) ->
 
+  LIB               = require './lib/'
+  TransactionRecord = require './lib/transaction_record'
 
-write_csv = (path) ->
-  opts =
-    columns: TransactionRecord.FRESHBOOKS_EXPENSE_COLUMNS
-    header: yes
+  factory = API.factory [API.mixins('Action')],
 
-  writer = (expenses) ->
-    return ACC.middleware.write_csv(path, opts)(expenses)
-  return writer
+    # args.sourcePath
+    # args.outputPath
+    initialize: ->
+      @q 'readSource'
+      @q 'filter'
+      @q 'writeRecords'
 
+    readSource: (API, args) ->
+      return LIB.readCSV(args.sourcePath).then (data) ->
+        args.records = data.map(TransactionRecord.from_array)
+        return args
 
-complete = (path) ->
-  print path.toString()
-  return
+    filter: (API, args) ->
+      args.records = U.filter(args.records, (record) ->
+        return no if record.type is 'credit'
+        unless record.category
+          throw new Error("Uncategorized record: #{record.date}, #{record.description}")
+        return yes
+      ).map( (record) ->
+        return record.to_freshbooks_expense()
+      )
+      return args
+
+    writeRecords: (API, args) ->
+      args.records.unshift(TransactionRecord.FRESHBOOKS_EXPENSE_COLUMNS)
+      return LIB.writeCSV(args.outputPath, args.records)
+
+  return factory()
