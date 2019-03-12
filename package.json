@@ -1,12 +1,12 @@
 {
-  "name"        : "accounting",
-  "private"     : true,
-  "version"     : "0.0.0",
-  "description" : "A collection of scripts for my personal accounting.",
-  "author"      : "Kris Walker <kris@kixx.name> (http://www.kixx.name/)",
+  "name": "accounting",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A collection of scripts for my personal accounting.",
+  "author": "Kris Walker <kris@kixx.name> (http://www.kixx.name/)",
   "dependencies": {
-    "csv"     : "~0.4.1",
-    "moment"  : "~2.10.2",
-    "numeral" : "~1.5.3"
+    "csv": "5.1.1",
+    "moment": "2.24.0",
+    "numeral": "2.0.6"
   }
 }
